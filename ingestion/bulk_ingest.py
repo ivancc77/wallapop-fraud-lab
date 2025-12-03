@@ -4,34 +4,29 @@ import glob
 import os
 
 # --- CONFIGURACIÓN ---
-# CAMBIA ESTO SI TU ELASTIC ESTÁ EN OTRA IP (Ej. la de la VM de la práctica)
-ES_URL = "https://192.168.153.3:9200"
+# Apuntamos a la máquina remota donde está Elastic
+ES_URL = "http://192.168.153.3:9200"
 INDEX_NAME = "wallapop-items"
 
-# Si tu Elastic tiene usuario/pass (como en la práctica SNMP), ponlos aquí:
-AUTH = ('elastic', 'mlJZP3AuDE0pr4q1Rwq8') 
-#AUTH = None 
-
-# 3. Desactivamos la verificación SSL porque el certificado es autofirmado (típico en labs)
-VERIFY_SSL = False
+# Usuario y contraseña que me facilitaste
+AUTH = ('elastic', 'mlJZP3AuDE0pr4q1Rwq8')
 
 def bulk_ingest():
-    # 1. Buscar el archivo JSON más reciente generado por el poller
-    # Buscamos en la misma carpeta donde está este script
+    # Buscar el archivo JSON más reciente en la carpeta actual
     list_of_files = glob.glob('wallapop_*.json') 
     
     if not list_of_files:
-        print("[!] No encuentro archivos .json en la carpeta 'ingestion'.")
-        print("    ¿Has ejecutado el poller.py? ¿Se guardó el archivo aquí?")
+        print("[!] No encuentro archivos wallapop_*.json en esta carpeta.")
+        print("    Primero ejecuta: python3 poller.py")
         return
 
     latest_file = max(list_of_files, key=os.path.getctime)
-    print(f"[*] Archivo seleccionado para subir: {latest_file}")
+    print(f"[*] Archivo seleccionado: {latest_file}")
 
     bulk_data = ""
     count = 0
 
-    # 2. Leer el archivo línea a línea (formato NDJSON)
+    # Leer el archivo línea a línea (formato NDJSON)
     with open(latest_file, 'r', encoding='utf-8') as f:
         for line in f:
             if not line.strip(): continue
@@ -39,13 +34,13 @@ def bulk_ingest():
             try:
                 doc = json.loads(line)
                 
-                # Preparamos el formato BULK que pide Elastic:
+                # [cite_start]Preparamos el formato BULK [cite: 994]
                 # Línea 1: Metadatos (índice y ID)
                 meta = {"index": {"_index": INDEX_NAME}}
                 if "id" in doc:
-                    meta["index"]["_id"] = doc["id"] # Usamos el ID de Wallapop
+                    meta["index"]["_id"] = doc["id"]
                 
-                # Línea 2: El dato en sí
+                # Línea 2: El documento
                 bulk_data += json.dumps(meta) + "\n"
                 bulk_data += json.dumps(doc) + "\n"
                 count += 1
@@ -57,9 +52,9 @@ def bulk_ingest():
         print("[!] El archivo parece vacío.")
         return
 
-    print(f"[*] Enviando {count} documentos a {ES_URL}...")
+    print(f"[*] Intentando enviar {count} documentos a {ES_URL}...")
 
-    # 3. Enviar petición POST a Elastic
+    # Enviar petición POST a Elastic
     try:
         response = requests.post(
             f"{ES_URL}/_bulk",
@@ -70,14 +65,19 @@ def bulk_ingest():
         )
 
         if response.status_code == 200:
-            print(f"[*] ¡ÉXITO! Datos ingestados correctamente.")
-            print("    Ahora ve a Kibana -> Stack Management -> Data Views y crea uno para 'wallapop-items*'")
+            resp_json = response.json()
+            if resp_json.get("errors"):
+                print("[!] Ojo, hubo algunos errores en la inserción (revisa los logs).")
+                # Imprimir el primer error para depurar si hace falta
+                print(resp_json['items'][0]) 
+            else:
+                print(f"[*] ¡ÉXITO! {count} documentos ingestados correctamente.")
         else:
-            print(f"[!] Error {response.status_code}: {response.text}")
+            print(f"[!] Error HTTP {response.status_code}: {response.text}")
 
     except Exception as e:
         print(f"[!] Error de conexión: {e}")
-        print("    ¿Está Elasticsearch encendido y la URL es correcta?")
+        print("    Asegúrate de que la VM 192.168.153.3 está encendida y Elastic corriendo.")
 
 if __name__ == "__main__":
     bulk_ingest()

@@ -3,10 +3,8 @@ import json
 import os
 from datetime import datetime
 
-# --- 1. CONFIGURACIÓN ---
-# Buscamos iPhones para asegurar datos hoy
+# --- CONFIGURACIÓN ---
 SEARCH_KEYWORDS = "iphone" 
-# Umbral de precio para detectar ofertas sospechosas
 PRECIO_MERCADO = 400.0 
 PALABRAS_SOSPECHOSAS = ["urgente", "bloqueado", "icloud", "sin factura", "envío gratis", "solo whatsapp", "indiviso"]
 
@@ -19,26 +17,21 @@ HEADERS = {
 }
 
 def calcular_riesgo(item):
-    """Calcula un score de riesgo del 0 al 100."""
     score = 0
     razones = []
-    
     precio = item.get("price", {}).get("amount", 0)
     titulo = (item.get("title") or "").lower()
     descripcion = (item.get("description") or "").lower()
 
-    # Regla A: Precio demasiado bajo
     if 0 < precio < (PRECIO_MERCADO * 0.5):
         score += 40
         razones.append("Precio anómalamente bajo")
 
-    # Regla B: Palabras clave sospechosas
     encontradas = [kw for kw in PALABRAS_SOSPECHOSAS if kw in titulo or kw in descripcion]
     if encontradas:
         score += 20 * len(encontradas)
         razones.append(f"Keywords sospechosas: {', '.join(encontradas)}")
 
-    # Regla C: Descripción muy corta
     if len(descripcion) < 15:
         score += 10
         razones.append("Descripción muy corta")
@@ -46,50 +39,56 @@ def calcular_riesgo(item):
     return min(score, 100), razones
 
 def buscar_items_hoy():
-    """Descarga los anuncios publicados HOY."""
     params = {
         "keywords": SEARCH_KEYWORDS,
         "order_by": "newest",
-        "time_filter": "today",  # REQUISITO DEL PDF
-        "latitude": "40.4168",   # Madrid
+        "time_filter": "today", 
+        "latitude": "40.4168",
         "longitude": "-3.7038",
         "source": "search_box"
     }
 
-    print(f"[*] Conectando a Wallapop (Filtro: HOY, Query: '{SEARCH_KEYWORDS}')...")
-    
+    print(f"[*] Buscando anuncios recientes de '{SEARCH_KEYWORDS}'...")
     try:
         response = requests.get(URL_API, headers=HEADERS, params=params, timeout=10)
         response.raise_for_status()
-        
         data = response.json()
-        items = data.get("data", {}).get("section", {}).get("payload", {}).get("items", [])
-        
-        print(f"[*] Se han descargado {len(items)} anuncios.")
-        return items
-
+        return data.get("data", {}).get("section", {}).get("payload", {}).get("items", [])
     except Exception as e:
-        print(f"[!] Error de conexión con Wallapop: {e}")
+        print(f"[!] Error: {e}")
         return []
 
 def guardar_datos(items):
-    """Guarda los datos enriquecidos en un fichero JSON."""
     if not items:
-        print("[!] No hay items para guardar.")
+        print("[!] No se encontraron items.")
         return
 
-    # Nombre de archivo: wallapop_categoria_YYYYMMDD.json
-    fecha = datetime.now().strftime("%Y%m%d")
-    nombre_fichero = f"wallapop_smartphones_{fecha}.json"
-
-    print(f"[*] Procesando {len(items)} items y calculando riesgo...")
+    fecha_hora = datetime.now().strftime("%Y%m%d_%H%M%S")
+    nombre_fichero = f"wallapop_smartphones_{fecha_hora}.json"
     
-    with open(nombre_fichero, "w", encoding="utf-8") as f:
+    # Guardar en carpeta hermana 'ingestion' si existe
+    if os.path.exists("../ingestion"):
+        ruta_completa = os.path.join("..", "ingestion", nombre_fichero)
+    else:
+        ruta_completa = nombre_fichero
+
+    print(f"[*] Guardando {len(items)} items en {ruta_completa}...")
+    
+    with open(ruta_completa, "w", encoding="utf-8") as f:
         for item in items:
-            # 1. Calcular Riesgo
             risk_score, risk_factors = calcular_riesgo(item)
             
-            # 2. Crear documento limpio para Elastic
+            # --- CORRECCIÓN DE FECHAS ---
+            # [cite_start]Wallapop envía 'created_at' como un número largo (milisegundos) [cite: 221]
+            ts_millis = item.get("created_at")
+            
+            if ts_millis:
+                # Convertimos milisegundos a fecha ISO legible
+                fecha_publicacion = datetime.fromtimestamp(ts_millis / 1000.0).isoformat()
+            else:
+                # Si falla, usamos la actual como fallback
+                fecha_publicacion = datetime.now().isoformat()
+
             doc = {
                 "id": item.get("id"),
                 "title": item.get("title"),
@@ -98,7 +97,6 @@ def guardar_datos(items):
                 "currency": item.get("price", {}).get("currency"),
                 "category_id": item.get("category_id"),
                 "user_id": item.get("user_id"),
-                # ESTRUCTURA CORREGIDA PARA EL MAPA:
                 "location": {
                     "geo": {
                         "lat": item.get("location", {}).get("latitude"),
@@ -107,7 +105,8 @@ def guardar_datos(items):
                     "city": item.get("location", {}).get("city")
                 },
                 "timestamps": {
-                    "crawled_at": datetime.now().isoformat()
+                    "crawled_at": datetime.now().isoformat(), # Cuándo pasaste el script
+                    "created_at": fecha_publicacion           # CUÁNDO SE PUBLICÓ EL ANUNCIO
                 },
                 "enrichment": {
                     "risk_score": risk_score,
@@ -115,11 +114,7 @@ def guardar_datos(items):
                     "suspicious_keywords": [kw for kw in PALABRAS_SOSPECHOSAS if kw in (item.get("description") or "")]
                 }
             }
-            
-            # 3. Escribir una línea por objeto (NDJSON)
             f.write(json.dumps(doc, ensure_ascii=False) + "\n")
-            
-    print(f"[*] ¡ÉXITO! Archivo guardado: {nombre_fichero}")
 
 if __name__ == "__main__":
     items = buscar_items_hoy()

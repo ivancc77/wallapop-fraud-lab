@@ -9,6 +9,7 @@ import statistics
 # --- CONFIGURACIÓN ---
 SEARCH_KEYWORDS = "iphone"
 ARCHIVO_MAESTRO = "wallapop_master.json"  # Nombre fijo del archivo
+UMBRAL_RIESGO = 40
 
 PALABRAS_SOSPECHOSAS = [
     "urgente", "bloqueado", "icloud", "sin factura", "envío gratis", 
@@ -134,6 +135,7 @@ def guardar_datos_incrementales(items):
     }
     
     nuevos_guardados = 0
+    omitidos_por_riesgo = 0
 
     # 3. Abrir en modo 'a' (append) para añadir al final sin borrar lo anterior
     print(f"[*] Escribiendo nuevos datos en {ruta_completa}...")
@@ -146,6 +148,11 @@ def guardar_datos_incrementales(items):
                 continue
 
             risk_score, risk_factors = calcular_riesgo(item, stats_lote)
+
+            # FILTRO 2: RIESGO BAJO 
+            if risk_score < UMBRAL_RIESGO:
+                omitidos_por_riesgo += 1
+                continue # Saltamos este item y no lo escribimos
             
             ts_millis = item.get("created_at")
             if ts_millis:
@@ -187,7 +194,8 @@ def guardar_datos_incrementales(items):
             ids_existentes.add(item_id) # Lo añadimos al set en memoria por si sale repetido en el mismo lote
             nuevos_guardados += 1
 
-    print(f"[*] Proceso finalizado. Se han añadido {nuevos_guardados} anuncios nuevos.")
+    print(f"[*] Proceso finalizado. Se han añadido {nuevos_guardados} anuncios sospechosos.")
+    print(f"    - Omitidos por riesgo bajo (<{UMBRAL_RIESGO}): {omitidos_por_riesgo}")
 
 if __name__ == "__main__":
     items = buscar_items_paginados()

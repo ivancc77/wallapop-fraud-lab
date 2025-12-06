@@ -2,39 +2,30 @@ import time
 import os
 import datetime
 
-# Intervalo en segundos (300s = 5 minutos)
 INTERVALO = 300 
 
-print(f"[*] --- INICIANDO MONITOR AUTOMÁTICO ---")
-print(f"[*] Frecuencia: Cada {INTERVALO} segundos")
-print("[*] Pulsa Ctrl+C para detenerlo en cualquier momento.\n")
+print(f"[*] --- MONITOR DE ESTAFAS WALLAPOP ---")
+print(f"[*] Ciclo: {INTERVALO}s | Archivo: wallapop_master.json")
+print("[*] Ctrl+C para salir.\n")
 
 try:
     while True:
         ahora = datetime.datetime.now().strftime("%H:%M:%S")
-        print(f"┌── [ {ahora} ] Iniciando nuevo ciclo...")
+        print(f"┌── [ {ahora} ] Iniciando ciclo...")
         
         # 1. EJECUTAR POLLER
-        # Buscamos el script en la carpeta hermana '../poller/'
-        print("│ >> 1. Descargando datos (ejecutando ../poller/poller.py)...")
-        
-        # --- CAMBIO CLAVE AQUÍ ABAJO ---
-        codigo_salida = os.system("python ../poller/poller.py")
-        
-        if codigo_salida != 0:
-            print("│ [!] Error: No se pudo ejecutar el poller. ¿La ruta es correcta?")
-            print("│     Esperando al siguiente ciclo...")
+        # Usa python3 para Linux
+        print("│ >> 1. Buscando nuevos anuncios sospechosos...")
+        if os.system("python3 ../poller/poller_mejorado.py") != 0:
+            print("│ [!] Alerta: El poller falló o no encontró el archivo.")
         
         else:
             # 2. EJECUTAR INGESTIÓN
-            # Como bulk_ingest.py está en la MISMA carpeta que este monitor, no hace falta ruta
-            print("│ >> 2. Subiendo datos a Elastic (bulk_ingest.py)...")
-            os.system("python bulk_ingest.py")
+            print("│ >> 2. Sincronizando Elastic...")
+            os.system("python3 bulk_ingest.py")
             
-        print(f"└── Ciclo terminado. Durmiendo {INTERVALO}s...\n")
-        
-        # Esperar hasta la siguiente vuelta
+        print(f"└── Ciclo finalizado. Esperando {INTERVALO}s...\n")
         time.sleep(INTERVALO)
 
 except KeyboardInterrupt:
-    print("\n[!] Monitor detenido por el usuario.")
+    print("\n[!] Monitor detenido.")

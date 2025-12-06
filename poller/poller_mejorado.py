@@ -8,13 +8,15 @@ import statistics
 
 # --- CONFIGURACIÓN ---
 SEARCH_KEYWORDS = "iphone"
-ARCHIVO_MAESTRO = "wallapop_master.json"  # Nombre fijo del archivo
+ARCHIVO_MAESTRO = "wallapop_master.json"
 UMBRAL_RIESGO = 40
 
+# Añadidas las nuevas palabras de pago sospechoso
 PALABRAS_SOSPECHOSAS = [
     "urgente", "bloqueado", "icloud", "sin factura", "envío gratis", 
     "solo whatsapp", "indiviso", "réplica", "clon", "imitación", 
-    "sin face id", "tara", "no enciende", "piezas"
+    "sin face id", "tara", "no enciende", "piezas",
+    "bizum", "transferencia", "whatsapp", "6", "6.", "no negociable", "seminuevo" # Números sueltos a veces indican tlf camuflado
 ]
 
 NUM_PAGINAS = 5 
@@ -28,27 +30,17 @@ HEADERS = {
 }
 
 def obtener_ids_existentes(ruta_archivo):
-    """Lee el archivo maestro y devuelve un set con los IDs ya guardados."""
     ids = set()
-    if not os.path.exists(ruta_archivo):
-        return ids
-    
-    print(f"[*] Leyendo base de datos existente en {ruta_archivo}...")
+    if not os.path.exists(ruta_archivo): return ids
     try:
         with open(ruta_archivo, "r", encoding="utf-8") as f:
             for linea in f:
-                linea = linea.strip()
-                if not linea: continue
-                try:
-                    doc = json.loads(linea)
-                    if "id" in doc:
-                        ids.add(doc["id"])
-                except:
-                    continue
-    except Exception as e:
-        print(f"[!] Error leyendo archivo maestro: {e}")
-    
-    print(f"[*] {len(ids)} anuncios ya existentes en la base de datos.")
+                if linea.strip():
+                    try:
+                        doc = json.loads(linea)
+                        if "id" in doc: ids.add(doc["id"])
+                    except: continue
+    except: pass
     return ids
 
 def calcular_riesgo(item, stats_lote):
@@ -66,7 +58,7 @@ def calcular_riesgo(item, stats_lote):
         razones.append(f"Precio muy bajo (Media: {precio_medio:.0f}€)")
 
     num_anuncios = stats_lote['conteo_vendedores'].get(user_id, 0)
-    if num_anuncios >= 4:
+    if num_anuncios >= 3:
         score += 30
         razones.append(f"Vendedor masivo ({num_anuncios} anuncios)")
 
@@ -75,7 +67,7 @@ def calcular_riesgo(item, stats_lote):
         score += 20 * len(encontradas)
         razones.append(f"Keywords sospechosas: {', '.join(encontradas)}")
 
-    if len(descripcion) < 10:
+    if len(descripcion) < 15:
         score += 10
         razones.append("Descripción muy corta")
 
@@ -102,24 +94,22 @@ def buscar_items_paginados():
             if not items: break
             all_items.extend(items)
             time.sleep(0.5) 
-        except Exception as e:
-            print(f"    [!] Error paginando: {e}")
-            break
+        except: break
             
     print(f"[*] Total descargado de la API: {len(all_items)} items.")
     return all_items
 
 def guardar_datos_incrementales(items):
-    # Definir ruta (en carpeta ingestion si existe, si no, local)
+    # Ruta inteligente: busca la carpeta hermana ingestion o usa la actual
     if os.path.exists("../ingestion"):
         ruta_completa = os.path.join("..", "ingestion", ARCHIVO_MAESTRO)
+    elif os.path.exists("ingestion"): # Por si se ejecuta desde root
+        ruta_completa = os.path.join("ingestion", ARCHIVO_MAESTRO)
     else:
         ruta_completa = ARCHIVO_MAESTRO
 
-    # 1. Cargar IDs que ya tenemos para no duplicar
     ids_existentes = obtener_ids_existentes(ruta_completa)
 
-    # 2. Calcular estadísticas del lote actual
     if items:
         precios = [i.get("price", {}).get("amount", 0) for i in items if i.get("price", {}).get("amount", 0) > 10]
         precio_medio_lote = statistics.median(precios) if precios else 400
@@ -129,30 +119,29 @@ def guardar_datos_incrementales(items):
         precio_medio_lote = 400
         conteo_vendedores = {}
 
-    stats_lote = {
-        "precio_medio": precio_medio_lote,
-        "conteo_vendedores": conteo_vendedores
-    }
+    stats_lote = {"precio_medio": precio_medio_lote, "conteo_vendedores": conteo_vendedores}
     
     nuevos_guardados = 0
-    omitidos_por_riesgo = 0
+    omitidos = 0
 
-    # 3. Abrir en modo 'a' (append) para añadir al final sin borrar lo anterior
-    print(f"[*] Escribiendo nuevos datos en {ruta_completa}...")
+    print(f"[*] Actualizando {ruta_completa}...")
     with open(ruta_completa, "a", encoding="utf-8") as f:
         for item in items:
+            # --- FILTRO 1: RELEVANCIA (TÍTULO) ---
+            # Si la palabra clave no está en el TÍTULO, es basura (ej: fundas, spam de tiendas)
+            titulo = item.get("title", "").lower()
+            if SEARCH_KEYWORDS.lower() not in titulo:
+                continue 
+
             item_id = item.get("id")
-            
-            # FILTRO DE DUPLICADOS
-            if item_id in ids_existentes:
-                continue
+            if item_id in ids_existentes: continue
 
             risk_score, risk_factors = calcular_riesgo(item, stats_lote)
 
-            # FILTRO 2: RIESGO BAJO 
+            # --- FILTRO 2: RIESGO ---
             if risk_score < UMBRAL_RIESGO:
-                omitidos_por_riesgo += 1
-                continue # Saltamos este item y no lo escribimos
+                omitidos += 1
+                continue 
             
             ts_millis = item.get("created_at")
             if ts_millis:
@@ -160,7 +149,7 @@ def guardar_datos_incrementales(items):
             else:
                 fecha_publicacion = datetime.now(timezone.utc).isoformat()
             
-            # Intentar obtener URL de imagen (si existe)
+            # Extraer imagen
             imagenes = item.get("images", [])
             img_url = imagenes[0].get("urls", {}).get("medium") if imagenes else None
 
@@ -172,7 +161,7 @@ def guardar_datos_incrementales(items):
                 "currency": item.get("price", {}).get("currency"),
                 "category_id": item.get("category_id"),
                 "user_id": item.get("user_id"),
-                "image_url": img_url,  # Guardamos la URL para el visor
+                "image_url": img_url,
                 "location": {
                     "geo": {
                         "lat": item.get("location", {}).get("latitude"),
@@ -191,11 +180,10 @@ def guardar_datos_incrementales(items):
                 }
             }
             f.write(json.dumps(doc, ensure_ascii=False) + "\n")
-            ids_existentes.add(item_id) # Lo añadimos al set en memoria por si sale repetido en el mismo lote
+            ids_existentes.add(item_id)
             nuevos_guardados += 1
 
-    print(f"[*] Proceso finalizado. Se han añadido {nuevos_guardados} anuncios sospechosos.")
-    print(f"    - Omitidos por riesgo bajo (<{UMBRAL_RIESGO}): {omitidos_por_riesgo}")
+    print(f"[*] Proceso completado: +{nuevos_guardados} anuncios sospechosos añadidos (Omitidos {omitidos} por riesgo bajo).")
 
 if __name__ == "__main__":
     items = buscar_items_paginados()

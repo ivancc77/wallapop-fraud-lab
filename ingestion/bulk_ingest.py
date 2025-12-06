@@ -2,32 +2,35 @@ import json
 import requests
 import glob
 import os
-import urllib3 # 1. Importar esto
+import urllib3
 
-# 2. Desactivar las advertencias de seguridad para que no molesten en la terminal
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # --- CONFIGURACIÓN ---
-ES_URL = "https://192.168.153.3:9200" # HTTPS es correcto
+ES_URL = "https://192.168.153.3:9200" # Ajusta si usas localhost
 INDEX_NAME = "wallapop-items"
 AUTH = ('elastic', 'mlJZP3AuDE0pr4q1Rwq8')
+ARCHIVO_MAESTRO = "wallapop_master.json"
 
 def bulk_ingest():
-    # Buscar el JSON (en la carpeta actual o en ../poller)
-    list_of_files = glob.glob('wallapop_*.json') 
-    if not list_of_files:
-        list_of_files = glob.glob('../poller/wallapop_*.json')
-        if not list_of_files:
-             print("[!] No encuentro archivos wallapop_*.json.")
-             return
+    # Buscar el archivo maestro
+    if os.path.exists(ARCHIVO_MAESTRO):
+        ruta_archivo = ARCHIVO_MAESTRO
+    elif os.path.exists(f"../ingestion/{ARCHIVO_MAESTRO}"):
+        ruta_archivo = f"../ingestion/{ARCHIVO_MAESTRO}"
+    elif os.path.exists(f"../poller/{ARCHIVO_MAESTRO}"):
+        # Por si acaso se guarda en poller
+        ruta_archivo = f"../poller/{ARCHIVO_MAESTRO}"
+    else:
+        print(f"[!] No encuentro {ARCHIVO_MAESTRO}. Ejecuta el poller primero.")
+        return
 
-    latest_file = max(list_of_files, key=os.path.getctime)
-    print(f"[*] Archivo seleccionado: {latest_file}")
+    print(f"[*] Leyendo base de datos: {ruta_archivo}")
 
     bulk_data = ""
     count = 0
 
-    with open(latest_file, 'r', encoding='utf-8') as f:
+    with open(ruta_archivo, 'r', encoding='utf-8') as f:
         for line in f:
             if not line.strip(): continue
             try:
@@ -40,9 +43,11 @@ def bulk_ingest():
                 count += 1
             except: continue
 
-    if count == 0: return
+    if count == 0: 
+        print("[!] Archivo vacío.")
+        return
 
-    print(f"[*] Intentando enviar {count} documentos a {ES_URL}...")
+    print(f"[*] Sincronizando {count} documentos con Elastic...")
 
     try:
         response = requests.post(
@@ -50,12 +55,12 @@ def bulk_ingest():
             headers={"Content-Type": "application/x-ndjson"},
             data=bulk_data.encode('utf-8'),
             auth=AUTH,
-            timeout=30,
-            verify=False  # <--- 3. ESTA ES LA CLAVE PARA ARREGLAR TU ERROR
+            timeout=60, # Aumentamos tiempo por si el archivo es grande
+            verify=False 
         )
 
         if response.status_code == 200:
-            print(f"[*] ¡ÉXITO! {count} documentos ingestados correctamente.")
+            print(f"[*] ¡ÉXITO! Base de datos sincronizada.")
         else:
             print(f"[!] Error HTTP {response.status_code}: {response.text}")
 

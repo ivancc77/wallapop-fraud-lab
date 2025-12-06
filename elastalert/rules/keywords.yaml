@@ -18,3 +18,7 @@ alert_text: |
 alert_text_args:
 - "title"
 - "enrichment.suspicious_keywords"
+
+# Mira 24 horas atrás para encontrar datos antiguos y forzar el correo
+timeframe:
+  hours: 24

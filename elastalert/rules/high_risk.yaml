@@ -22,3 +22,7 @@ alert_text_args:
 - "title"
 - "enrichment.risk_score"
 - "user_id"
+
+# Mira 24 horas atrás para encontrar datos antiguos y forzar el correo
+timeframe:
+  hours: 24

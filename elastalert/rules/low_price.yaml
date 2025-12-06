@@ -24,3 +24,7 @@ alert_text_args:
 - "currency"
 - "enrichment.risk_factors"
 - "image_url"
+
+# Mira 24 horas atrás para encontrar datos antiguos y forzar el correo
+timeframe:
+  hours: 24

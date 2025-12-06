@@ -2,7 +2,7 @@ import time
 import os
 import datetime
 
-INTERVALO = 1800 
+INTERVALO = 300 
 
 print(f"[*] --- MONITOR DE ESTAFAS WALLAPOP ---")
 print(f"[*] Ciclo: {INTERVALO}s | Archivo: wallapop_master.json")

@@ -11,12 +11,15 @@ SEARCH_KEYWORDS = "iphone"
 ARCHIVO_MAESTRO = "wallapop_master.json"
 UMBRAL_RIESGO = 40
 
-# Añadidas las nuevas palabras de pago sospechoso
+# 1. NUEVA LISTA DE EXCLUSIÓN
+# Si alguna de estas palabras aparece en el título, el anuncio se ignora.
+PALABRAS_EXCLUIDAS = ["funda", "cargador", "case", "cristal templado", "protector"]
+
 PALABRAS_SOSPECHOSAS = [
     "urgente", "bloqueado", "icloud", "sin factura", "envío gratis", 
     "solo whatsapp", "indiviso", "réplica", "clon", "imitación", 
     "sin face id", "tara", "no enciende", "piezas",
-    "bizum", "transferencia", "whatsapp", "6", "6.", "no negociable", "seminuevo" # Números sueltos a veces indican tlf camuflado
+    "bizum", "transferencia", "whatsapp", "6", "6.", "no negociable", "seminuevo"
 ]
 
 NUM_PAGINAS = 5 
@@ -100,10 +103,9 @@ def buscar_items_paginados():
     return all_items
 
 def guardar_datos_incrementales(items):
-    # Ruta inteligente: busca la carpeta hermana ingestion o usa la actual
     if os.path.exists("../ingestion"):
         ruta_completa = os.path.join("..", "ingestion", ARCHIVO_MAESTRO)
-    elif os.path.exists("ingestion"): # Por si se ejecuta desde root
+    elif os.path.exists("ingestion"):
         ruta_completa = os.path.join("ingestion", ARCHIVO_MAESTRO)
     else:
         ruta_completa = ARCHIVO_MAESTRO
@@ -122,14 +124,22 @@ def guardar_datos_incrementales(items):
     stats_lote = {"precio_medio": precio_medio_lote, "conteo_vendedores": conteo_vendedores}
     
     nuevos_guardados = 0
-    omitidos = 0
+    omitidos_riesgo = 0
+    omitidos_basura = 0
 
     print(f"[*] Actualizando {ruta_completa}...")
     with open(ruta_completa, "a", encoding="utf-8") as f:
         for item in items:
-            # --- FILTRO 1: RELEVANCIA (TÍTULO) ---
-            # Si la palabra clave no está en el TÍTULO, es basura (ej: fundas, spam de tiendas)
             titulo = item.get("title", "").lower()
+            
+            # --- FILTRO 0: LIMPIEZA DE BASURA (FUNDAS/CARGADORES) ---
+            # Si el título contiene alguna palabra prohibida, adiós.
+            if any(palabra in titulo for palabra in PALABRAS_EXCLUIDAS):
+                omitidos_basura += 1
+                continue
+
+            # --- FILTRO 1: RELEVANCIA ---
+            # Si no contiene lo que buscamos (ej: iphone), fuera.
             if SEARCH_KEYWORDS.lower() not in titulo:
                 continue 
 
@@ -140,7 +150,7 @@ def guardar_datos_incrementales(items):
 
             # --- FILTRO 2: RIESGO ---
             if risk_score < UMBRAL_RIESGO:
-                omitidos += 1
+                omitidos_riesgo += 1
                 continue 
             
             ts_millis = item.get("created_at")
@@ -149,7 +159,6 @@ def guardar_datos_incrementales(items):
             else:
                 fecha_publicacion = datetime.now(timezone.utc).isoformat()
             
-            # Extraer imagen
             imagenes = item.get("images", [])
             img_url = imagenes[0].get("urls", {}).get("medium") if imagenes else None
 
@@ -183,7 +192,10 @@ def guardar_datos_incrementales(items):
             ids_existentes.add(item_id)
             nuevos_guardados += 1
 
-    print(f"[*] Proceso completado: +{nuevos_guardados} anuncios sospechosos añadidos (Omitidos {omitidos} por riesgo bajo).")
+    print(f"[*] Proceso completado:")
+    print(f"    + {nuevos_guardados} anuncios sospechosos guardados.")
+    print(f"    - {omitidos_riesgo} omitidos por riesgo bajo.")
+    print(f"    - {omitidos_basura} omitidos por ser fundas/cargadores.")
 
 if __name__ == "__main__":
     items = buscar_items_paginados()

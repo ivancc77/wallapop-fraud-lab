@@ -10,7 +10,7 @@ import re
 # --- CONFIGURACIÓN ---
 SEARCH_KEYWORDS = "iphone"
 ARCHIVO_MAESTRO = "wallapop_master.json"
-UMBRAL_RIESGO_MINIMO = 30 
+UMBRAL_RIESGO_MINIMO = 40 
 
 # --- 1. DICCIONARIO DE PRECIOS MÍNIMOS DE REFERENCIA ---
 # (Precios orientativos de segunda mano. Si baja mucho de aquí, es estafa).

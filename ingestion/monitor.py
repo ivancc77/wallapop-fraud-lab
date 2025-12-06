@@ -2,7 +2,7 @@ import time
 import os
 import datetime
 
-INTERVALO = 300 
+INTERVALO = 1800 
 
 print(f"[*] --- MONITOR DE ESTAFAS WALLAPOP ---")
 print(f"[*] Ciclo: {INTERVALO}s | Archivo: wallapop_master.json")
@@ -16,7 +16,7 @@ try:
         # 1. EJECUTAR POLLER
         # Usa python3 para Linux
         print("│ >> 1. Buscando nuevos anuncios sospechosos...")
-        if os.system("python3 ../poller/poller_mejorado.py") != 0:
+        if os.system("python3 ../poller/poller.py") != 0:
             print("│ [!] Alerta: El poller falló o no encontró el archivo.")
         
         else:

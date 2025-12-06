@@ -1,0 +1,20 @@
+# rules/keywords.yaml
+name: "ALERTA: Palabras Clave Prohibidas (Bizum/Réplica)"
+type: any
+index: wallapop-items
+
+filter:
+- query_string:
+    query: "enrichment.suspicious_keywords: *"
+
+alert:
+- "debug"
+
+alert_text: |
+  ⚠️ KEYWORDS SOSPECHOSAS
+  Producto: {0}
+  Palabras encontradas: {1}
+
+alert_text_args:
+- "title"
+- "enrichment.suspicious_keywords"

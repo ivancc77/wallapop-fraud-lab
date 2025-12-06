@@ -1,0 +1,26 @@
+# rules/low_price.yaml
+name: "ALERTA: Anomalía de Precio Detectada"
+type: any
+index: wallapop-items
+
+# Filtra documentos donde el poller ha escrito advertencias sobre el precio
+filter:
+- query_string:
+    query: "enrichment.risk_factors: (*Precio* OR *PRECIO*)"
+
+alert:
+- "debug"
+
+alert_text: |
+  📉 PRECIO SOSPECHOSO DETECTADO
+  Producto: {0}
+  Precio: {1} {2}
+  Motivos: {3}
+  Link: {4}
+
+alert_text_args:
+- "title"
+- "price"
+- "currency"
+- "enrichment.risk_factors"
+- "image_url"

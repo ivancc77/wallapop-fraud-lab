@@ -2,89 +2,171 @@ import requests
 import json
 import os
 import time
-from datetime import datetime, timezone  # <--- IMPORTANTE: Importamos timezone
+from datetime import datetime, timezone
 from collections import Counter
 import statistics
+import re
 
 # --- CONFIGURACIÓN ---
-SEARCH_KEYWORDS = "iphone" 
-PALABRAS_SOSPECHOSAS = [
-    "urgente", "bloqueado", "icloud", "sin factura", "envío gratis", 
-    "solo whatsapp", "indiviso", "réplica", "clon", "imitación", 
-    "sin face id", "tara", "no enciende", "piezas"
+SEARCH_KEYWORDS = "iphone"
+ARCHIVO_MAESTRO = "wallapop_master.json"
+UMBRAL_RIESGO_MINIMO = 30 
+
+# --- 1. DICCIONARIO DE PRECIOS MÍNIMOS DE REFERENCIA ---
+# (Precios orientativos de segunda mano. Si baja mucho de aquí, es estafa).
+# IMPORTANTE: Ordenar de más específico a menos (15 Pro Max antes que 15).
+PRECIOS_REFERENCIA = {
+    "16 pro max": 1100, "16 pro": 950, "iphone 16": 800,
+    "15 pro max": 850, "15 pro": 750, "15 plus": 650, "iphone 15": 550,
+    "14 pro max": 700, "14 pro": 600, "14 plus": 500, "iphone 14": 450,
+    "13 pro max": 550, "13 pro": 480, "iphone 13": 350,
+    "12 pro max": 400, "12 pro": 350, "iphone 12": 250,
+    "11 pro max": 300, "11 pro": 280, "iphone 11": 200,
+    "iphone x": 150, "iphone xr": 150, "iphone xs": 160
+}
+
+# --- 2. FILTROS Y KEYWORDS ---
+PALABRAS_EXCLUIDAS = [
+    "funda", "cargador", "case", "cristal", "tempered", "protector", "cable",
+    "auriculares", "adaptador", "caja vacía", "box only", "icloud", "bloqueo"
+]
+
+KEYWORDS_CRITICAS = [
+    "bizum", "transferencia", "ingreso", "envío incluido", "solo envío",
+    "encontrado", "réplica", "clon", "imitación", "1:1", "demo",
+    "whatsapp", "telegram", "6", "no negociable" # El 6 para detectar tlf
+]
+
+KEYWORDS_SOSPECHOSAS = [
+    "urgente", "viaje", "regalo", "indeseado", "sin factura",
+    "leer bien", "no mareantes", "piezas", "sin face id", "tara"
 ]
 
 NUM_PAGINAS = 5 
-
 URL_API = "https://api.wallapop.com/api/v3/search"
-HEADERS = {
-    "Host": "api.wallapop.com",
-    "X-DeviceOS": "0",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "*/*"
-}
+HEADERS = {"Host": "api.wallapop.com", "X-DeviceOS": "0", "User-Agent": "Mozilla/5.0"}
 
-def calcular_riesgo(item, stats_lote):
+def obtener_ids_existentes(ruta_archivo):
+    ids = set()
+    if not os.path.exists(ruta_archivo): return ids
+    try:
+        with open(ruta_archivo, "r", encoding="utf-8") as f:
+            for linea in f:
+                if linea.strip():
+                    try:
+                        doc = json.loads(linea)
+                        if "id" in doc: ids.add(doc["id"])
+                    except: continue
+    except: pass
+    return ids
+
+def calcular_riesgo_inteligente(item, stats_lote):
     score = 0
     razones = []
     
     precio = item.get("price", {}).get("amount", 0)
     titulo = (item.get("title") or "").lower()
     descripcion = (item.get("description") or "").lower()
+    texto_completo = titulo + " " + descripcion
     user_id = item.get("user_id")
 
-    precio_medio = stats_lote['precio_medio']
-    if precio_medio > 0 and 10 < precio < (precio_medio * 0.5):
+    # ==============================================================================
+    # 1. ANÁLISIS DE PRECIO SEGMENTADO (La clave de la mejora)
+    # ==============================================================================
+    modelo_detectado = None
+    precio_ref = 0
+
+    # Buscamos qué modelo es en el título
+    for modelo, precio_min in PRECIOS_REFERENCIA.items():
+        if modelo in titulo:
+            modelo_detectado = modelo
+            precio_ref = precio_min
+            break # Paramos en la primera coincidencia (la más específica)
+
+    if modelo_detectado:
+        # Tenemos referencia específica (ej: iPhone 15 Pro)
+        if precio < (precio_ref * 0.4): # Menos del 40% del valor de ref
+            score += 95
+            razones.append(f"PRECIO IMPOSIBLE para {modelo_detectado} ({precio}€ vs Ref {precio_ref}€)")
+        elif precio < (precio_ref * 0.6): # Menos del 60%
+            score += 60
+            razones.append(f"Precio muy bajo para {modelo_detectado}")
+    else:
+        # NO detectamos modelo exacto -> Usamos la media del lote (Plan B)
+        precio_medio = stats_lote['precio_medio']
+        if precio_medio > 0 and precio < (precio_medio * 0.4):
+            score += 40
+            razones.append(f"Precio bajo vs Media general ({precio}€ vs {precio_medio:.0f}€)")
+
+    # ==============================================================================
+    # 2. KEYWORDS Y PATRONES
+    # ==============================================================================
+    
+    # Detección de teléfonos en texto (6xx xxx xxx)
+    if re.search(r'\b[67]\d{2}[\s.-]?\d{3}[\s.-]?\d{3}\b', texto_completo):
         score += 50
-        razones.append(f"Precio muy bajo (Media: {precio_medio:.0f}€)")
+        razones.append("Teléfono camuflado en descripción")
 
+    # Keywords Críticas
+    criticas = [kw for kw in KEYWORDS_CRITICAS if kw in texto_completo]
+    if criticas:
+        score += 50
+        razones.append(f"ALERTA: {', '.join(set(criticas))}")
+
+    # Keywords Sospechosas
+    sospechosas = [kw for kw in KEYWORDS_SOSPECHOSAS if kw in texto_completo]
+    if sospechosas:
+        score += 15 * len(sospechosas)
+        razones.append(f"Sospechoso: {', '.join(set(sospechosas))}")
+
+    # Vendedor Masivo
     num_anuncios = stats_lote['conteo_vendedores'].get(user_id, 0)
-    if num_anuncios >= 4:
-        score += 30
-        razones.append(f"Vendedor masivo ({num_anuncios} anuncios)")
+    if num_anuncios >= 3:
+        score += 25
+        razones.append(f"Vendedor masivo ({num_anuncios} items)")
 
-    encontradas = [kw for kw in PALABRAS_SOSPECHOSAS if kw in titulo or kw in descripcion]
-    if encontradas:
-        score += 20 * len(encontradas)
-        razones.append(f"Keywords sospechosas: {', '.join(encontradas)}")
-
-    if len(descripcion) < 10:
+    # Descripción Corta
+    if len(descripcion) < 15:
         score += 10
-        razones.append("Descripción muy corta")
+        razones.append("Descripción insuficiente")
 
     return min(score, 100), razones
 
 def buscar_items_paginados():
     all_items = []
-    print(f"[*] Descargando anuncios de '{SEARCH_KEYWORDS}'...")
+    print(f"[*] Buscando '{SEARCH_KEYWORDS}'...")
     
     for i in range(NUM_PAGINAS):
         params = {
             "keywords": SEARCH_KEYWORDS,
             "order_by": "newest",
             "time_filter": "today", 
-            "latitude": "40.4168",
-            "longitude": "-3.7038",
+            "latitude": "40.4168", "longitude": "-3.7038",
             "source": "search_box",
             "start": i * 40
         }
         try:
-            response = requests.get(URL_API, headers=HEADERS, params=params, timeout=10)
-            response.raise_for_status()
-            items = response.json().get("data", {}).get("section", {}).get("payload", {}).get("items", [])
+            r = requests.get(URL_API, headers=HEADERS, params=params, timeout=10)
+            items = r.json().get("data", {}).get("section", {}).get("payload", {}).get("items", [])
             if not items: break
             all_items.extend(items)
             time.sleep(0.5) 
-        except Exception as e:
-            print(f"    [!] Error paginando: {e}")
-            break
-            
-    print(f"[*] Total descargado: {len(all_items)} items.")
+        except: break
     return all_items
 
-def guardar_datos(items):
+def guardar_datos_incrementales(items):
+    if os.path.exists("../ingestion"):
+        ruta_completa = os.path.join("..", "ingestion", ARCHIVO_MAESTRO)
+    elif os.path.exists("ingestion"):
+        ruta_completa = os.path.join("ingestion", ARCHIVO_MAESTRO)
+    else:
+        ruta_completa = ARCHIVO_MAESTRO
+
+    ids_existentes = obtener_ids_existentes(ruta_completa)
+
+    # Calculamos stats generales por si acaso
     if items:
-        precios = [i.get("price", {}).get("amount", 0) for i in items if i.get("price", {}).get("amount", 0) > 10]
+        precios = [i.get("price", {}).get("amount", 0) for i in items if i.get("price", {}).get("amount", 0) > 50]
         precio_medio_lote = statistics.median(precios) if precios else 400
         vendedores = [i.get("user_id") for i in items]
         conteo_vendedores = Counter(vendedores)
@@ -92,33 +174,38 @@ def guardar_datos(items):
         precio_medio_lote = 400
         conteo_vendedores = {}
 
-    stats_lote = {
-        "precio_medio": precio_medio_lote,
-        "conteo_vendedores": conteo_vendedores
-    }
+    stats_lote = {"precio_medio": precio_medio_lote, "conteo_vendedores": conteo_vendedores}
     
-    fecha_hora = datetime.now().strftime("%Y%m%d_%H%M%S")
-    nombre_fichero = f"wallapop_smartphones_{fecha_hora}.json"
-    
-    if os.path.exists("../ingestion"):
-        ruta_completa = os.path.join("..", "ingestion", nombre_fichero)
-    else:
-        ruta_completa = nombre_fichero
+    nuevos = 0
+    omitidos = 0
 
-    print(f"[*] Guardando en {ruta_completa}")
+    print(f"[*] Procesando {len(items)} items...")
     
-    with open(ruta_completa, "w", encoding="utf-8") as f:
-        # 1. Items reales
+    with open(ruta_completa, "a", encoding="utf-8") as f:
         for item in items:
-            risk_score, risk_factors = calcular_riesgo(item, stats_lote)
+            titulo = item.get("title", "").lower()
             
+            # Filtros básicos
+            if any(p in titulo for p in PALABRAS_EXCLUIDAS): continue
+            if SEARCH_KEYWORDS.lower() not in titulo: continue 
+            if item.get("id") in ids_existentes: continue
+
+            # --- RIESGO INTELIGENTE ---
+            risk_score, risk_factors = calcular_riesgo_inteligente(item, stats_lote)
+
+            if risk_score < UMBRAL_RIESGO_MINIMO:
+                omitidos += 1
+                continue 
+            
+            # Preparar documento
             ts_millis = item.get("created_at")
-            if ts_millis:
-                # CAMBIO: Añadimos timezone.utc
-                fecha_publicacion = datetime.fromtimestamp(ts_millis / 1000.0, timezone.utc).isoformat()
-            else:
-                # CAMBIO: Añadimos timezone.utc
-                fecha_publicacion = datetime.now(timezone.utc).isoformat()
+            fecha_pub = datetime.fromtimestamp(ts_millis/1000.0, timezone.utc).isoformat() if ts_millis else datetime.now(timezone.utc).isoformat()
+            
+            imagenes = item.get("images", [])
+            img_url = imagenes[0].get("urls", {}).get("medium") if imagenes else None
+
+            all_kw = KEYWORDS_CRITICAS + KEYWORDS_SOSPECHOSAS
+            found_kw = [kw for kw in all_kw if kw in (titulo + " " + (item.get("description") or "").lower())]
 
             doc = {
                 "id": item.get("id"),
@@ -128,51 +215,27 @@ def guardar_datos(items):
                 "currency": item.get("price", {}).get("currency"),
                 "category_id": item.get("category_id"),
                 "user_id": item.get("user_id"),
+                "image_url": img_url,
                 "location": {
-                    "geo": {
-                        "lat": item.get("location", {}).get("latitude"),
-                        "lon": item.get("location", {}).get("longitude")
-                    },
+                    "geo": { "lat": item.get("location", {}).get("latitude"), "lon": item.get("location", {}).get("longitude") },
                     "city": item.get("location", {}).get("city")
                 },
                 "timestamps": {
                     "crawled_at": datetime.now(timezone.utc).isoformat(),
-                    "created_at": fecha_publicacion
+                    "created_at": fecha_pub
                 },
                 "enrichment": {
                     "risk_score": risk_score,
                     "risk_factors": risk_factors,
-                    "suspicious_keywords": [kw for kw in PALABRAS_SOSPECHOSAS if kw in (item.get("description") or "")]
+                    "suspicious_keywords": found_kw
                 }
             }
             f.write(json.dumps(doc, ensure_ascii=False) + "\n")
+            ids_existentes.add(item.get("id"))
+            nuevos += 1
 
-        # 2. Item Fantasma (Monitor Check)
-        ahora_utc = datetime.now(timezone.utc) # CAMBIO: UTC explícito
-        fake_id = f"TEST_AUTO_{ahora_utc.strftime('%H%M%S')}"
-        
-        doc_fake = {
-            "id": fake_id,
-            "title": ">>> ITEM DE CONTROL <<<",
-            "description": "Item generado para validar latencia y timezone.",
-            "price": 66.6, 
-            "currency": "EUR",
-            "category_id": "0000",
-            "user_id": "bot_monitor",
-            "location": { "geo": { "lat": 40.4168, "lon": -3.7038 }, "city": "Check" },
-            "timestamps": {
-                "crawled_at": ahora_utc.isoformat(),
-                "created_at": ahora_utc.isoformat() # Se pintará en la hora EXACTA actual
-            },
-            "enrichment": {
-                "risk_score": 100, 
-                "risk_factors": ["Test Item"],
-                "suspicious_keywords": ["test"]
-            }
-        }
-        f.write(json.dumps(doc_fake, ensure_ascii=False) + "\n")
-        print(f"    [+] Item fantasma inyectado: {fake_id} (Hora UTC: {ahora_utc})")
+    print(f"[*] Guardados: {nuevos} | Omitidos: {omitidos}")
 
 if __name__ == "__main__":
     items = buscar_items_paginados()
-    guardar_datos(items)
+    guardar_datos_incrementales(items)

@@ -1,0 +1,18 @@
+# config.yaml
+rules_folder: rules
+run_every:
+  minutes: 1
+buffer_time:
+  minutes: 15
+
+# Conexión a tu Elastic
+es_host: 192.168.153.3
+es_port: 9200
+es_username: elastic
+es_password: mlJZP3AuDE0pr4q1Rwq8 
+
+verify_certs: False
+ssl_show_warn: False
+use_ssl: True
+
+writeback_index: elastalert_status

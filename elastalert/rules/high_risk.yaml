@@ -1,0 +1,24 @@
+# rules/high_risk.yaml
+name: "ALERTA: Anuncio de Riesgo Extremo (>80)"
+type: any
+index: wallapop-items
+
+# Filtra documentos con puntuación numérica alta
+filter:
+- range:
+    enrichment.risk_score:
+      gte: 80
+
+alert:
+- "debug"
+
+alert_text: |
+  🚨 RIESGO EXTREMO DETECTADO
+  Producto: {0}
+  Riesgo: {1}/100
+  Vendedor: {2}
+
+alert_text_args:
+- "title"
+- "enrichment.risk_score"
+- "user_id"

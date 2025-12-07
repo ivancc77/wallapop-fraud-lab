@@ -34,7 +34,7 @@ PALABRAS_EXCLUIDAS = [
 KEYWORDS_CRITICAS = [
     "bizum", "transferencia", "ingreso", "envío incluido", "solo envío",
     "encontrado", "réplica", "clon", "imitación", "1:1", "demo",
-    "whatsapp", "telegram", "6", "no negociable" # El 6 para detectar tlf
+    "whatsapp", "telegram"
 ]
 
 KEYWORDS_SOSPECHOSAS = [

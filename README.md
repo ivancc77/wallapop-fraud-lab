@@ -11,7 +11,7 @@
 
 ## 📖 Descripción del Proyecto
 
-Este proyecto implementa un pipeline completo de **Monitorización y Alerta** (basado en la Opción A.1) capaz de recolectar datos de mercado, analizarlos mediante lógica de negocio avanzada y visualizar amenazas potenciales.
+Este proyecto implementa un pipeline completo de **Monitorización y Alerta**  capaz de recolectar datos de mercado, analizarlos mediante lógica de negocio avanzada y visualizar amenazas potenciales.
 
 El sistema no se limita a recolectar precios, sino que aplica una **Lógica de Sospecha (Suspicion Logic)** basada en:
 * 📉 **Segmentación de Precios:** Detecta "chollos imposibles" comparando el precio con la media del modelo específico (ej: iPhone 15 Pro vs iPhone 11).

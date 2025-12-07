@@ -70,7 +70,6 @@ wallapop-fraud-lab/
 
 ## 🚀 Instalación y Despliegue
 
-``
 ### 1. Prerrequisitos
 * Ubuntu / Linux (Recomendado).
 

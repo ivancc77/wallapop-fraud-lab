@@ -1,24 +1,31 @@
 # rules/keywords.yaml
-name: "ALERTA: Palabras Clave Prohibidas (Bizum/Réplica)"
+name: "ALERTA CRITICA: Intento de Estafa (Bizum/Whatsapp)"
 type: any
 index: wallapop-items
 
+timestamp_field: "timestamps.created_at"
+timeframe:
+  hours: 24
+
 filter:
 - query_string:
-    query: "enrichment.suspicious_keywords: *"
+    query: "enrichment.suspicious_keywords: (bizum OR whatsapp OR transferencia OR 6 OR 'no negociable' OR réplica OR clon)"
 
+# --- SOLO MODO PANTALLA ---
 alert:
 - "debug"
 
 alert_text: |
-  ⚠️ KEYWORDS SOSPECHOSAS
+  🚨 ALERTA DE FRAUDE DETECTADA 🚨
+  --------------------------------
   Producto: {0}
-  Palabras encontradas: {1}
+  Precio: {1} EUR
+  Vendedor: {2}
+  Motivos: {3}
+  --------------------------------
 
 alert_text_args:
 - "title"
+- "price"
+- "user_id"
 - "enrichment.suspicious_keywords"
-
-# Mira 24 horas atrás para encontrar datos antiguos y forzar el correo
-timeframe:
-  hours: 24

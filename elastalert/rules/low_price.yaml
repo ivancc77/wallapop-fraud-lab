@@ -3,28 +3,30 @@ name: "ALERTA: Anomalía de Precio Detectada"
 type: any
 index: wallapop-items
 
-# Filtra documentos donde el poller ha escrito advertencias sobre el precio
+timestamp_field: "timestamps.created_at"
+timeframe:
+  hours: 24
+
+# Filtro: Busca advertencias de precio en los factores de riesgo
 filter:
 - query_string:
     query: "enrichment.risk_factors: (*Precio* OR *PRECIO*)"
 
+# Salida limpia por pantalla
 alert:
 - "debug"
 
 alert_text: |
-  📉 PRECIO SOSPECHOSO DETECTADO
+  📉 PRECIO SOSPECHOSO DETECTADO 📉
+  ---------------------------------
   Producto: {0}
-  Precio: {1} {2}
-  Motivos: {3}
-  Link: {4}
+  Precio: {1} EUR
+  Motivo: {2}
+  Riesgo: {3}/100
+  ---------------------------------
 
 alert_text_args:
 - "title"
 - "price"
-- "currency"
 - "enrichment.risk_factors"
-- "image_url"
-
-# Mira 24 horas atrás para encontrar datos antiguos y forzar el correo
-timeframe:
-  hours: 24
+- "enrichment.risk_score"

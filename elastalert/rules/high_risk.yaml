@@ -3,26 +3,31 @@ name: "ALERTA: Anuncio de Riesgo Extremo (>80)"
 type: any
 index: wallapop-items
 
-# Filtra documentos con puntuación numérica alta
+timestamp_field: "timestamps.created_at"
+timeframe:
+  hours: 24
+
+# Filtro: Score mayor de 80
 filter:
 - range:
     enrichment.risk_score:
       gte: 80
 
+# Salida limpia por pantalla
 alert:
 - "debug"
 
 alert_text: |
-  🚨 RIESGO EXTREMO DETECTADO
+  🚨 RIESGO EXTREMO DETECTADO 🚨
+  ------------------------------
   Producto: {0}
   Riesgo: {1}/100
-  Vendedor: {2}
+  Factores: {2}
+  Vendedor: {3}
+  ------------------------------
 
 alert_text_args:
 - "title"
 - "enrichment.risk_score"
+- "enrichment.risk_factors"
 - "user_id"
-
-# Mira 24 horas atrás para encontrar datos antiguos y forzar el correo
-timeframe:
-  hours: 24

@@ -64,10 +64,10 @@ wallapop-fraud-lab/
 │
 └── 📑 report/
     └── report.pdf           # Informe final del proyecto
-``
----
-
 ```
+
+
+
 ## 🚀 Instalación y Despliegue
 
 ``

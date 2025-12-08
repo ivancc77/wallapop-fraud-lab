@@ -28,7 +28,8 @@ PRECIOS_REFERENCIA = {
 # --- 2. FILTROS Y KEYWORDS ---
 PALABRAS_EXCLUIDAS = [
     "funda", "cargador", "case", "cristal", "tempered", "protector", "cable",
-    "auriculares", "adaptador", "caja vacía", "box only", "icloud", "bloqueo", "chasis", "carcasa"
+    "auriculares", "adaptador", "caja vacía", "box only", "icloud", "bloqueo", "chasis", "carcasa",
+    "chasis", "cover", "baterias"
 ]
 
 KEYWORDS_CRITICAS = [

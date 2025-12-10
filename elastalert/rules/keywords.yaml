@@ -11,9 +11,19 @@ filter:
 - query_string:
     query: "enrichment.suspicious_keywords: (bizum OR whatsapp OR transferencia OR 6 OR 'no negociable' OR réplica OR clon)"
 
-# --- SOLO MODO PANTALLA ---
+# Salida limpia por pantalla
 alert:
 - "debug"
+- "email"
+
+# Destinatarios específicos de esta regla (además de los globales si quieres)
+email:
+  - "cuentapararedireccionar@gmail.com"
+
+# Asunto del correo
+alert_subject: "🚨 ALERTA DE ESTAFA (KEYWORDS) 🚨 ({0})"
+alert_subject_args:
+  - "title"
 
 alert_text: |
   🚨 ALERTA DE FRAUDE DETECTADA 🚨

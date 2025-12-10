@@ -15,6 +15,16 @@ filter:
 # Salida limpia por pantalla
 alert:
 - "debug"
+- "email"
+
+# Destinatarios específicos de esta regla (además de los globales si quieres)
+email:
+  - "cuentapararedireccionar@gmail.com"
+
+# Asunto del correo
+alert_subject: "📉 PRECIO SOSPECHOSO DETECTADO 📉 ({0})"
+alert_subject_args:
+  - "title"
 
 alert_text: |
   📉 PRECIO SOSPECHOSO DETECTADO 📉

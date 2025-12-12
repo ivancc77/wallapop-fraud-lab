@@ -17,7 +17,7 @@ alert:
 - "debug"
 - "email"
 
-# Destinatarios específicos de esta regla (además de los globales si quieres)
+# Destinatarios específicos de esta regla 
 email:
   - "cuentapararedireccionar@gmail.com"
 

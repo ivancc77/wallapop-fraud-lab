@@ -12,7 +12,7 @@ buffer_time:
 es_host: 192.168.153.3
 es_port: 9200
 es_username: elastic
-es_password: mlJZP3AuDE0pr4q1Rwq8   # tu contraseña de Elasticsearch
+es_password: mlJZP3AuDE0pr4q1Rwq8  
 
 verify_certs: False
 ssl_show_warn: False
@@ -22,7 +22,7 @@ writeback_index: elastalert_status
 
 # --- CONFIGURACIÓN PARA ENVÍO DE CORREOS (GMAIL) ---
 
-# Tipo de alerta por defecto (puedes dejarlo así)
+# Tipo de alerta por defecto 
 alert:
   - "email"
 

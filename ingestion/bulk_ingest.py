@@ -7,7 +7,7 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # --- CONFIGURACIÓN ---
-ES_URL = "https://192.168.153.3:9200" # Ajusta si usas localhost
+ES_URL = "https://192.168.153.3:9200" 
 INDEX_NAME = "wallapop-items"
 AUTH = ('elastic', 'mlJZP3AuDE0pr4q1Rwq8')
 ARCHIVO_MAESTRO = "wallapop_master.json"
